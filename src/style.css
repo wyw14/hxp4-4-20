@@ -22,6 +22,202 @@ html, body {
     radial-gradient(ellipse at center, #1a0f0f 0%, #0a0a0a 60%, #000000 100%);
 }
 
+.main-container {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.archive-panel {
+  width: 320px;
+  background: linear-gradient(145deg, #1a1810, #0f0d08);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow:
+    0 0 0 3px #0a0806,
+    0 0 0 6px #1a1410,
+    0 15px 50px rgba(0, 0, 0, 0.8),
+    inset 0 2px 4px rgba(255, 255, 255, 0.04);
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+.archive-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.archive-panel::-webkit-scrollbar-track {
+  background: #0a0806;
+  border-radius: 3px;
+}
+
+.archive-panel::-webkit-scrollbar-thumb {
+  background: #3a3020;
+  border-radius: 3px;
+}
+
+.archive-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #2a2418;
+}
+
+.archive-title {
+  display: block;
+  color: #aa8844;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 6px;
+  text-shadow: 0 0 8px rgba(170, 136, 68, 0.4);
+}
+
+.archive-subtitle {
+  display: block;
+  color: #5a4a30;
+  font-size: 10px;
+  letter-spacing: 3px;
+  margin-top: 6px;
+}
+
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.archive-empty {
+  text-align: center;
+  color: #3a3020;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 30px 10px;
+  line-height: 1.8;
+}
+
+.archive-item {
+  background: linear-gradient(145deg, #1f1a12, #141008);
+  border: 1px solid #2a2418;
+  border-radius: 6px;
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+
+.archive-item:hover {
+  border-color: #4a3a20;
+  box-shadow: 0 0 12px rgba(170, 136, 68, 0.1);
+}
+
+.archive-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.archive-signal-id {
+  color: #665544;
+  font-size: 9px;
+  letter-spacing: 2px;
+  font-family: 'Courier New', monospace;
+}
+
+.archive-signal-name {
+  color: #ccaa66;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-shadow: 0 0 6px rgba(204, 170, 102, 0.3);
+}
+
+.archive-signal-desc {
+  color: #7a6a4a;
+  font-size: 10px;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.note-paper {
+  position: relative;
+  background: linear-gradient(180deg, #2a2418 0%, #1f1a10 100%);
+  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid #3a3020;
+}
+
+.note-paper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    #4a3a20 0px,
+    #4a3a20 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-radius: 4px 4px 0 0;
+}
+
+.note-label {
+  color: #5a4a30;
+  font-size: 9px;
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.note-textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 120px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #2a2418;
+  border-radius: 3px;
+  color: #bb9966;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 8px;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+}
+
+.note-textarea:focus {
+  border-color: #6a5a30;
+  box-shadow: 0 0 8px rgba(170, 136, 68, 0.15), inset 0 0 8px rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.note-textarea::placeholder {
+  color: #3a3020;
+  font-style: italic;
+}
+
+.note-status {
+  margin-top: 6px;
+  text-align: right;
+  color: #4a3a20;
+  font-size: 8px;
+  letter-spacing: 1px;
+  min-height: 10px;
+}
+
+.note-status.saved {
+  color: #4a7a4a;
+}
+
+.note-status.saving {
+  color: #7a6a3a;
+  animation: flickerText 0.3s infinite;
+}
+
 .tv-frame {
   background: linear-gradient(145deg, #2a2420, #1a1410);
   border-radius: 18px;

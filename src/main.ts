@@ -32,6 +32,12 @@ class Game {
   private binaryStream: string = '';
   private binaryTimer: number = 0;
 
+  private signalNotes: Map<string, string> = new Map();
+  private readonly NOTES_STORAGE_KEY = 'channel_zero_signal_notes';
+  private readonly FOUND_STORAGE_KEY = 'channel_zero_found_signals';
+
+  private noteSaveTimers: Map<string, number> = new Map();
+
   private elements: {
     signalFill: HTMLElement;
     signalOverlay: HTMLElement;
@@ -40,6 +46,7 @@ class Game {
     binaryStream: HTMLElement;
     foundCount: HTMLElement;
     audioToggle: HTMLButtonElement;
+    archiveList: HTMLElement;
   };
 
   constructor() {
@@ -61,7 +68,8 @@ class Game {
       signalDescription: get('signalOverlay').querySelector('.signal-description') as HTMLElement,
       binaryStream: get('signalOverlay').querySelector('.binary-stream') as HTMLElement,
       foundCount: get('foundCount'),
-      audioToggle: get('audioToggle') as HTMLButtonElement
+      audioToggle: get('audioToggle') as HTMLButtonElement,
+      archiveList: get('archiveList')
     };
   }
 
@@ -74,6 +82,8 @@ class Game {
       console.error('Failed to load signals:', e);
       return;
     }
+
+    this.loadFromStorage();
 
     const canvas = document.getElementById('glCanvas') as HTMLCanvasElement;
     this.renderer = new CRTRenderer(canvas);
@@ -125,7 +135,139 @@ class Game {
 
     void this.knobController;
 
+    this.renderArchive();
     this.animate();
+  }
+
+  private loadFromStorage(): void {
+    try {
+      const foundRaw = localStorage.getItem(this.FOUND_STORAGE_KEY);
+      if (foundRaw) {
+        const foundArray = JSON.parse(foundRaw) as string[];
+        this.foundSignals = new Set(foundArray);
+        this.elements.foundCount.textContent = `Signals found: ${this.foundSignals.size} / ${this.signals.length}`;
+      }
+    } catch (e) {
+      console.warn('Failed to load found signals from storage:', e);
+    }
+
+    try {
+      const notesRaw = localStorage.getItem(this.NOTES_STORAGE_KEY);
+      if (notesRaw) {
+        const notesObj = JSON.parse(notesRaw) as Record<string, string>;
+        this.signalNotes = new Map(Object.entries(notesObj));
+      }
+    } catch (e) {
+      console.warn('Failed to load notes from storage:', e);
+    }
+  }
+
+  private saveFoundSignals(): void {
+    try {
+      localStorage.setItem(this.FOUND_STORAGE_KEY, JSON.stringify(Array.from(this.foundSignals)));
+    } catch (e) {
+      console.warn('Failed to save found signals:', e);
+    }
+  }
+
+  private saveNote(_signalId: string): void {
+    try {
+      const notesObj: Record<string, string> = {};
+      this.signalNotes.forEach((value, key) => {
+        notesObj[key] = value;
+      });
+      localStorage.setItem(this.NOTES_STORAGE_KEY, JSON.stringify(notesObj));
+    } catch (e) {
+      console.warn('Failed to save notes:', e);
+    }
+  }
+
+  private setNoteStatus(signalId: string, status: 'saving' | 'saved' | ''): void {
+    const statusEl = document.querySelector(`[data-note-status="${signalId}"]`) as HTMLElement | null;
+    if (!statusEl) return;
+    statusEl.classList.remove('saving', 'saved');
+    if (status) {
+      statusEl.classList.add(status);
+      statusEl.textContent = status === 'saving' ? 'SAVING...' : 'SAVED';
+    } else {
+      statusEl.textContent = '';
+    }
+  }
+
+  private handleNoteInput(signalId: string, value: string): void {
+    this.signalNotes.set(signalId, value);
+    this.setNoteStatus(signalId, 'saving');
+
+    const existingTimer = this.noteSaveTimers.get(signalId);
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer);
+    }
+
+    const timerId = window.setTimeout(() => {
+      this.saveNote(signalId);
+      this.setNoteStatus(signalId, 'saved');
+      this.noteSaveTimers.delete(signalId);
+
+      window.setTimeout(() => {
+        this.setNoteStatus(signalId, '');
+      }, 1500);
+    }, 400);
+
+    this.noteSaveTimers.set(signalId, timerId);
+  }
+
+  private renderArchive(): void {
+    const container = this.elements.archiveList;
+
+    if (this.foundSignals.size === 0) {
+      container.innerHTML = `
+        <div class="archive-empty">
+          NO SIGNALS ARCHIVED<br />
+          <span style="color: #2a2418;">Tune in to discover transmissions...</span>
+        </div>
+      `;
+      return;
+    }
+
+    const foundSignalList = this.signals.filter(s => this.foundSignals.has(s.id));
+
+    container.innerHTML = foundSignalList.map(signal => {
+      const note = this.signalNotes.get(signal.id) || '';
+      return `
+        <div class="archive-item" data-signal-id="${signal.id}">
+          <div class="archive-item-header">
+            <span class="archive-signal-name">${signal.name}</span>
+            <span class="archive-signal-id">${signal.id.toUpperCase()}</span>
+          </div>
+          <div class="archive-signal-desc">${signal.description}</div>
+          <div class="note-paper">
+            <div class="note-label">Personal Note</div>
+            <textarea
+              class="note-textarea"
+              data-note-input="${signal.id}"
+              placeholder="Write your observations about this signal..."
+              spellcheck="false"
+            >${this.escapeHtml(note)}</textarea>
+            <div class="note-status" data-note-status="${signal.id}"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll<HTMLTextAreaElement>('[data-note-input]').forEach(textarea => {
+      const signalId = textarea.dataset.noteInput;
+      if (!signalId) return;
+      textarea.addEventListener('input', (e) => {
+        const target = e.target as HTMLTextAreaElement;
+        this.handleNoteInput(signalId, target.value);
+      });
+    });
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   private async loadSignals(): Promise<SignalsData> {
@@ -177,6 +319,8 @@ class Game {
         if (!this.foundSignals.has(signal.id)) {
           this.foundSignals.add(signal.id);
           this.elements.foundCount.textContent = `Signals found: ${this.foundSignals.size} / ${this.signals.length}`;
+          this.saveFoundSignals();
+          this.renderArchive();
         }
       }
     }
