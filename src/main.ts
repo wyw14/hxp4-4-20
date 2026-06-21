@@ -36,7 +36,9 @@ class Game {
   private readonly NOTES_STORAGE_KEY = 'channel_zero_signal_notes';
   private readonly FOUND_STORAGE_KEY = 'channel_zero_found_signals';
 
-  private noteSaveTimers: Map<string, number> = new Map();
+  private draftNotes: Map<string, string> = new Map();
+  private activeNoteSignalId: string | null = null;
+  private activeNoteElement: HTMLTextAreaElement | null = null;
 
   private elements: {
     signalFill: HTMLElement;
@@ -133,6 +135,14 @@ class Game {
       this.renderer?.resize();
     });
 
+    window.addEventListener('beforeunload', () => {
+      this.saveAllPendingNotes();
+    });
+
+    window.addEventListener('blur', () => {
+      this.saveAllPendingNotes();
+    });
+
     void this.knobController;
 
     this.renderArchive();
@@ -156,6 +166,7 @@ class Game {
       if (notesRaw) {
         const notesObj = JSON.parse(notesRaw) as Record<string, string>;
         this.signalNotes = new Map(Object.entries(notesObj));
+        this.draftNotes = new Map(Object.entries(notesObj));
       }
     } catch (e) {
       console.warn('Failed to load notes from storage:', e);
@@ -170,54 +181,128 @@ class Game {
     }
   }
 
-  private saveNote(_signalId: string): void {
+  private saveNoteToStorage(): boolean {
     try {
       const notesObj: Record<string, string> = {};
-      this.signalNotes.forEach((value, key) => {
+      this.draftNotes.forEach((value, key) => {
         notesObj[key] = value;
       });
       localStorage.setItem(this.NOTES_STORAGE_KEY, JSON.stringify(notesObj));
+      this.signalNotes = new Map(this.draftNotes);
+      return true;
     } catch (e) {
-      console.warn('Failed to save notes:', e);
+      console.warn('Failed to save notes to storage:', e);
+      return false;
     }
   }
 
-  private setNoteStatus(signalId: string, status: 'saving' | 'saved' | ''): void {
+  private setNoteStatus(signalId: string, status: 'saving' | 'saved' | 'error' | ''): void {
     const statusEl = document.querySelector(`[data-note-status="${signalId}"]`) as HTMLElement | null;
     if (!statusEl) return;
-    statusEl.classList.remove('saving', 'saved');
+    statusEl.classList.remove('saving', 'saved', 'error');
     if (status) {
       statusEl.classList.add(status);
-      statusEl.textContent = status === 'saving' ? 'SAVING...' : 'SAVED';
+      if (status === 'saving') statusEl.textContent = 'SAVING...';
+      else if (status === 'saved') statusEl.textContent = 'SAVED';
+      else if (status === 'error') statusEl.textContent = '! SAVE FAILED - DRAFT KEPT';
     } else {
       statusEl.textContent = '';
     }
   }
 
-  private handleNoteInput(signalId: string, value: string): void {
-    this.signalNotes.set(signalId, value);
-    this.setNoteStatus(signalId, 'saving');
+  private commitDraft(signalId: string): boolean {
+    const draftValue = this.draftNotes.get(signalId);
+    if (draftValue === undefined) return true;
 
-    const existingTimer = this.noteSaveTimers.get(signalId);
-    if (existingTimer !== undefined) {
-      window.clearTimeout(existingTimer);
-    }
-
-    const timerId = window.setTimeout(() => {
-      this.saveNote(signalId);
+    const saved = this.saveNoteToStorage();
+    if (saved) {
       this.setNoteStatus(signalId, 'saved');
-      this.noteSaveTimers.delete(signalId);
-
       window.setTimeout(() => {
         this.setNoteStatus(signalId, '');
       }, 1500);
-    }, 400);
+    } else {
+      this.setNoteStatus(signalId, 'error');
+    }
+    return saved;
+  }
 
-    this.noteSaveTimers.set(signalId, timerId);
+  private handleNoteInput(signalId: string, value: string): void {
+    this.draftNotes.set(signalId, value);
+    this.setNoteStatus(signalId, 'saving');
+
+    const saved = this.saveNoteToStorage();
+    if (saved) {
+      this.setNoteStatus(signalId, 'saved');
+      window.setTimeout(() => {
+        this.setNoteStatus(signalId, '');
+      }, 1000);
+    } else {
+      this.setNoteStatus(signalId, 'error');
+    }
+  }
+
+  private handleNoteBlur(signalId: string): void {
+    const draftValue = this.draftNotes.get(signalId);
+    const storedValue = this.signalNotes.get(signalId);
+
+    if (draftValue !== undefined && draftValue !== storedValue) {
+      this.commitDraft(signalId);
+    }
+
+    if (this.activeNoteSignalId === signalId) {
+      this.activeNoteSignalId = null;
+      this.activeNoteElement = null;
+    }
+  }
+
+  private handleNoteFocus(signalId: string, element: HTMLTextAreaElement): void {
+    this.activeNoteSignalId = signalId;
+    this.activeNoteElement = element;
+  }
+
+  private saveAllPendingNotes(): void {
+    this.draftNotes.forEach((_value, signalId) => {
+      const draftValue = this.draftNotes.get(signalId);
+      const storedValue = this.signalNotes.get(signalId);
+      if (draftValue !== undefined && draftValue !== storedValue) {
+        this.commitDraft(signalId);
+      }
+    });
+  }
+
+  private preserveActiveNoteState(): { signalId: string; value: string; selectionStart: number; selectionEnd: number } | null {
+    if (!this.activeNoteSignalId || !this.activeNoteElement) return null;
+    try {
+      return {
+        signalId: this.activeNoteSignalId,
+        value: this.activeNoteElement.value,
+        selectionStart: this.activeNoteElement.selectionStart,
+        selectionEnd: this.activeNoteElement.selectionEnd
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private restoreActiveNoteState(state: { signalId: string; value: string; selectionStart: number; selectionEnd: number } | null): void {
+    if (!state) return;
+    const textarea = document.querySelector<HTMLTextAreaElement>(`[data-note-input="${state.signalId}"]`);
+    if (textarea) {
+      textarea.value = state.value;
+      this.activeNoteElement = textarea;
+      this.activeNoteSignalId = state.signalId;
+      try {
+        textarea.focus();
+        textarea.setSelectionRange(state.selectionStart, state.selectionEnd);
+      } catch {
+        // Ignore selection restore errors
+      }
+    }
   }
 
   private renderArchive(): void {
     const container = this.elements.archiveList;
+    const activeState = this.preserveActiveNoteState();
 
     if (this.foundSignals.size === 0) {
       container.innerHTML = `
@@ -232,7 +317,7 @@ class Game {
     const foundSignalList = this.signals.filter(s => this.foundSignals.has(s.id));
 
     container.innerHTML = foundSignalList.map(signal => {
-      const note = this.signalNotes.get(signal.id) || '';
+      const note = this.draftNotes.get(signal.id) || this.signalNotes.get(signal.id) || '';
       return `
         <div class="archive-item" data-signal-id="${signal.id}">
           <div class="archive-item-header">
@@ -257,11 +342,29 @@ class Game {
     container.querySelectorAll<HTMLTextAreaElement>('[data-note-input]').forEach(textarea => {
       const signalId = textarea.dataset.noteInput;
       if (!signalId) return;
+
       textarea.addEventListener('input', (e) => {
         const target = e.target as HTMLTextAreaElement;
         this.handleNoteInput(signalId, target.value);
       });
+
+      textarea.addEventListener('focus', () => {
+        this.handleNoteFocus(signalId, textarea);
+      });
+
+      textarea.addEventListener('blur', () => {
+        this.handleNoteBlur(signalId);
+      });
+
+      textarea.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          this.commitDraft(signalId);
+        }
+      });
     });
+
+    this.restoreActiveNoteState(activeState);
   }
 
   private escapeHtml(text: string): string {
@@ -317,6 +420,7 @@ class Game {
         this.binaryStream = signal.fragmentPath;
 
         if (!this.foundSignals.has(signal.id)) {
+          this.saveAllPendingNotes();
           this.foundSignals.add(signal.id);
           this.elements.foundCount.textContent = `Signals found: ${this.foundSignals.size} / ${this.signals.length}`;
           this.saveFoundSignals();
